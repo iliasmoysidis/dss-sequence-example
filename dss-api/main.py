@@ -3,7 +3,7 @@ import logging
 import os
 import uuid
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import requests
 import uvicorn
@@ -11,23 +11,48 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
+
+# Configuration
+class Config:
+    API_KEY_HEADER = "X-API-Key"
+    REQUEST_TIMEOUT = 5
+    JOB_PROCESSING_STEPS = 5
+    STEP_DURATION = 2
+
+    # Mock optimization results
+    MOCK_RESULTS = {
+        "energy_savings_kwh": 245.8,
+        "cost_reduction_eur": 48.72,
+        "co2_reduction_kg": 98.32,
+        "optimization_score": 0.85,
+        "recommended_actions": [
+            "Reduce HVAC temperature by 2°C during off-peak hours",
+            "Implement smart lighting controls in zone B",
+            "Schedule high-energy equipment during low-cost periods",
+        ],
+    }
+
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# In-memory job storage
+jobs_storage: Dict[str, Dict[str, Any]] = {}
+
+# FastAPI app
 app = FastAPI(
     title="DSS Mock API",
-    description="Mock Decision Support System - Functionality 1 (Energy Optimization) for proof-of-concept integration",
+    description="Mock Decision Support System for energy optimization integration",
     version="1.0.0",
 )
 
 # API Key authentication
-API_KEY_HEADER = "X-API-Key"
-api_key_header = APIKeyHeader(name=API_KEY_HEADER, auto_error=False)
+api_key_header = APIKeyHeader(name=Config.API_KEY_HEADER, auto_error=False)
 
 
-def get_api_key(api_key: str = Depends(api_key_header)):
-    """Get the API key from the environment variable"""
+def get_api_key(api_key: str = Depends(api_key_header)) -> str:
+    """Validate API key from request header."""
 
     expected_key = os.getenv("BACKEND_API_KEY")
 
@@ -39,10 +64,7 @@ def get_api_key(api_key: str = Depends(api_key_header)):
     return api_key
 
 
-# In-memory job storage
-jobs_storage: Dict[str, Dict[str, Any]] = {}
-
-
+# Pydantic models
 class F1JobRequest(BaseModel):
     building_id: str = "building_001"
     optimization_type: str = "energy_efficiency"
@@ -60,86 +82,120 @@ class F1JobStatus(BaseModel):
     job_id: str
     status: str
     progress: int
-    result: Dict[str, Any] = None
+    result: Optional[Dict[str, Any]] = None
     created_at: str
-    completed_at: str = None
+    completed_at: Optional[str] = None
 
 
-async def simulate_job_processing(job_id: str, callback_url: str = None):
-    """Simulate DSS F1 (Energy Optimization) job processing with status updates"""
+# Job processing functions
+def update_job_progress(job_id: str, status: str, progress: int) -> None:
+    """Update job status and progress in storage."""
 
-    try:
-        # Update job status to running
-        jobs_storage[job_id]["status"] = "running"
-        jobs_storage[job_id]["progress"] = 10
+    if job_id in jobs_storage:
+        jobs_storage[job_id]["status"] = status
+        jobs_storage[job_id]["progress"] = progress
 
-        # Simulate processing time (10 minutes -> 10 seconds for demo)
-        await asyncio.sleep(2)
-        jobs_storage[job_id]["progress"] = 25
 
-        await asyncio.sleep(2)
-        jobs_storage[job_id]["progress"] = 50
+def complete_job(job_id: str) -> None:
+    """Mark job as completed with results."""
 
-        await asyncio.sleep(2)
-        jobs_storage[job_id]["progress"] = 75
-
-        await asyncio.sleep(2)
-        jobs_storage[job_id]["progress"] = 90
-
-        await asyncio.sleep(2)
-
-        # Complete the job
+    if job_id in jobs_storage:
         jobs_storage[job_id]["status"] = "completed"
         jobs_storage[job_id]["progress"] = 100
         jobs_storage[job_id]["completed_at"] = datetime.now().isoformat()
-        jobs_storage[job_id]["result"] = {
-            "energy_savings_kwh": 245.8,
-            "cost_reduction_eur": 48.72,
-            "co2_reduction_kg": 98.32,
-            "optimization_score": 0.85,
-            "recommended_actions": [
-                "Reduce HVAC temperature by 2°C during off-peak hours",
-                "Implement smart lighting controls in zone B",
-                "Schedule high-energy equipment during low-cost periods",
-            ],
+        jobs_storage[job_id]["result"] = Config.MOCK_RESULTS
+
+
+def fail_job(job_id: str, error: str) -> None:
+    """Mark job as failed with error message."""
+
+    if job_id in jobs_storage:
+        jobs_storage[job_id]["status"] = "failed"
+        jobs_storage[job_id]["error"] = error
+
+
+async def send_webhook(callback_url: str, job_id: str) -> None:
+    """Send webhook notification for completed job."""
+
+    try:
+        callback_data = {
+            "job_id": job_id,
+            "status": "completed",
+            "result": jobs_storage[job_id]["result"],
         }
 
-        # Send callback if provided (webhook simulation)
-        if callback_url:
-            callback_data = {
-                "job_id": job_id,
-                "status": "completed",
-                "result": jobs_storage[job_id]["result"],
-            }
+        requests.post(callback_url, json=callback_data, timeout=Config.REQUEST_TIMEOUT)
+        logger.info(f"Webhook sent to {callback_url} for job {job_id}")
+    except Exception as e:
+        logger.error(f"Webhook failed for job {job_id}: {e}")
 
-            requests.post(callback_url, json=callback_data, timeout=5)
-            logger.info(f"Sent callback to {callback_url} for job {job_id}")
+
+async def simulate_job_processing(
+    job_id: str, callback_url: Optional[str] = None
+) -> None:
+    """Simulate energy optimization job processing."""
+
+    try:
+        update_job_progress(job_id, "running", 10)
+
+        # Simulate processing steps
+        progress_steps = [25, 50, 75, 90]
+        for progress in progress_steps:
+            await asyncio.sleep(Config.STEP_DURATION)
+            update_job_progress(job_id, "running", progress)
+
+        await asyncio.sleep(Config.STEP_DURATION)
+        complete_job(job_id)
+
+        if callback_url:
+            await send_webhook(callback_url, job_id)
 
     except Exception as e:
-        logger.error(f"Job processing failed: {e}")
-        jobs_storage[job_id]["status"] = "failed"
-        jobs_storage[job_id]["error"] = str(e)
+        logger.error(f"Job processing failed for {job_id}: {e}")
+        fail_job(job_id, str(e))
 
 
+# Utility functions
+def validate_job_exists(job_id: str) -> Dict[str, Any]:
+    """Validate job exists and return job data."""
+
+    if job_id not in jobs_storage:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
+        )
+
+    return jobs_storage[job_id]
+
+
+def validate_job_cancellable(job_data: Dict[str, Any]) -> None:
+    """Validate job can be cancelled."""
+
+    if job_data["status"] in ["completed", "failed"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot cancel completed or failed job",
+        )
+
+
+# API endpoints
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Health check endpoint."""
 
-    return {"status": "healthy", "service": "DSS F1 (Energy Optimization) Mock API"}
+    return {"status": "healthy", "service": "DSS Mock API"}
 
 
 @app.post("/f1/jobs", response_model=F1JobResponse)
 async def create_f1_job(
     job_request: F1JobRequest,
     background_tasks: BackgroundTasks,
-    callback_url: str = None,
-    api_key: str = Depends(get_api_key),
+    callback_url: Optional[str] = None,
+    _: str = Depends(get_api_key),
 ):
-    """Create a new DSS F1 (Energy Optimization) analysis job"""
+    """Create energy optimization analysis job."""
 
     job_id = str(uuid.uuid4())
 
-    # Store job in memory
     job_data = {
         "job_id": job_id,
         "status": "pending",
@@ -152,30 +208,23 @@ async def create_f1_job(
     }
 
     jobs_storage[job_id] = job_data
-
-    # Start background processing
     background_tasks.add_task(simulate_job_processing, job_id, callback_url)
 
-    logger.info(f"Created DSS F1 job {job_id} for building {job_request.building_id}")
+    logger.info(f"Created job {job_id} for building {job_request.building_id}")
 
     return F1JobResponse(
         job_id=job_id,
         status="pending",
-        message=f"DSS F1 energy optimization job created for building {job_request.building_id} ({job_request.optimization_type})",
+        message=f"Energy optimization job created for building {job_request.building_id} ({job_request.optimization_type})",
         created_at=job_data["created_at"],
     )
 
 
 @app.get("/f1/jobs/{job_id}", response_model=F1JobStatus)
-async def get_job_status(job_id: str, api_key: str = Depends(get_api_key)):
-    """Get the status of a specific DSS F1 energy optimization job"""
+async def get_job_status(job_id: str, _: str = Depends(get_api_key)):
+    """Get energy optimization job status."""
 
-    if job_id not in jobs_storage:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
-        )
-
-    job_data = jobs_storage[job_id]
+    job_data = validate_job_exists(job_id)
 
     return F1JobStatus(
         job_id=job_id,
@@ -188,31 +237,21 @@ async def get_job_status(job_id: str, api_key: str = Depends(get_api_key)):
 
 
 @app.get("/f1/jobs")
-async def list_jobs(api_key: str = Depends(get_api_key)):
-    """List all DSS F1 energy optimization jobs"""
+async def list_jobs(_: str = Depends(get_api_key)):
+    """List all energy optimization jobs."""
 
     return {"jobs": list(jobs_storage.values())}
 
 
 @app.delete("/f1/jobs/{job_id}")
-async def cancel_job(job_id: str, api_key: str = Depends(get_api_key)):
-    """Cancel a running DSS F1 energy optimization job"""
+async def cancel_job(job_id: str, _: str = Depends(get_api_key)):
+    """Cancel energy optimization job."""
 
-    if job_id not in jobs_storage:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
-        )
-
-    job_data = jobs_storage[job_id]
-
-    if job_data["status"] in ["completed", "failed"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot cancel completed or failed job",
-        )
+    job_data = validate_job_exists(job_id)
+    validate_job_cancellable(job_data)
 
     jobs_storage[job_id]["status"] = "cancelled"
-    logger.info(f"Cancelled DSS F1 job {job_id}")
+    logger.info(f"Cancelled job {job_id}")
 
     return {"message": f"Job {job_id} cancelled"}
 
