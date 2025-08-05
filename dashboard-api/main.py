@@ -1,8 +1,10 @@
 import asyncio
 import json
 import logging
+import pprint
 from datetime import datetime
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 import coloredlogs
 import httpx
@@ -122,6 +124,21 @@ class F1ToolResponse(BaseModel):
 requests_storage: Dict[str, Dict[str, Any]] = {}
 
 
+def _extract_hostname(host: str) -> str:
+    """Extract the hostname from a URL by removing scheme, port, and path"""
+
+    # If scheme is missing, prepend dummy scheme for parsing
+    if "://" not in host:
+        host_for_parse = f"//{host}"
+    else:
+        host_for_parse = host
+
+    parsed = urlparse(host_for_parse)
+
+    # parsed.hostname returns None if not present, fallback to input
+    return parsed.hostname or host.split(":")[0]
+
+
 class SSEPullCredentialsReceiver:
     """Handles SSE-based access token reception from consumer backend"""
 
@@ -135,6 +152,7 @@ class SSEPullCredentialsReceiver:
     async def start_listening(self, provider_host: str):
         """Start listening for SSE messages from consumer backend"""
 
+        provider_host = _extract_hostname(provider_host)
         sse_url = f"{self.consumer_backend_url}/pull/stream/provider/{provider_host}"
 
         headers = {
@@ -152,6 +170,7 @@ class SSEPullCredentialsReceiver:
                 async for line in response.aiter_lines():
                     if not self._listening:
                         break
+
                     await self._process_sse_line(line)
         except Exception as e:
             logger.error(f"SSE connection failed: {e}")
@@ -170,7 +189,11 @@ class SSEPullCredentialsReceiver:
 
                 if transfer_id:
                     self.credentials[transfer_id] = data
-                    logger.info(f"Received credentials for transfer {transfer_id}")
+                    logger.info(f"Received credentials for transfer {transfer_id}:")
+
+                    logger.debug(
+                        f"SSE message for transfer '{transfer_id}':\n{pprint.pformat(data)}"
+                    )
             except json.JSONDecodeError:
                 pass
 
@@ -182,6 +205,7 @@ class SSEPullCredentialsReceiver:
         for _ in range(timeout):
             if transfer_id in self.credentials:
                 return self.credentials[transfer_id]
+
             await asyncio.sleep(SSE_POLL_INTERVAL_SECONDS)
 
         raise TimeoutError(f"Credentials not received for transfer {transfer_id}")
@@ -238,15 +262,21 @@ async def run_edcpy_negotiation_and_transfer(
             credentials = await sse_receiver.get_credentials(transfer_id)
 
             # Extract access token from credentials
-            access_token = credentials.get("authKey") or credentials.get("token")
+            # The SSE message contains auth_code field with the JWT token
+            access_token = credentials.get("auth_code")
+
+            # Also get the endpoint URL from the credentials
+            endpoint_url = credentials.get("endpoint")
 
             if not access_token:
-                raise Exception("No access token in received credentials")
+                raise Exception("No auth_code (access token) in received credentials")
 
             logger.info(f"Received access token for transfer {transfer_id}")
 
-            # Call DSS service with the access token
-            dss_job_id = await call_dss_f1_service_with_token(access_token, f1_request)
+            # Call DSS service with the access token and endpoint
+            dss_job_id = await call_dss_f1_service_with_token(
+                access_token, endpoint_url, f1_request
+            )
 
             return dss_job_id
 
@@ -266,7 +296,7 @@ async def run_edcpy_negotiation_and_transfer(
 
 
 async def call_dss_f1_service_with_token(
-    access_token: str, f1_request: F1ToolRequest
+    access_token: str, endpoint_url: str, f1_request: F1ToolRequest
 ) -> str:
     """Call DSS F1 service using the received access token"""
 
@@ -279,8 +309,9 @@ async def call_dss_f1_service_with_token(
         }
 
         # Call DSS connector's public API using the access token
+        # The access token is already a complete JWT, no need for "Bearer" prefix
         headers = {
-            AUTHORIZATION_HEADER: f"Bearer {access_token}",
+            AUTHORIZATION_HEADER: access_token,
             CONTENT_TYPE_HEADER: JSON_CONTENT_TYPE,
         }
 
@@ -288,10 +319,11 @@ async def call_dss_f1_service_with_token(
             f"http://dashboard_api:8000/webhooks/dss-callback/{f1_request.user_id}"
         )
 
-        # Use the DSS connector's public API endpoint
+        # Use the endpoint URL from the credentials instead of hardcoded URL
+        # The endpoint URL points to the DSS connector's public API
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"http://dss_connector:{DSS_CONNECTOR_PUBLIC_PORT}/api/f1/jobs",  # DSS Connector Public API
+                endpoint_url,  # Use the endpoint from credentials
                 json=job_request,
                 headers=headers,
                 params={"callback_url": callback_url},
@@ -338,6 +370,7 @@ async def call_dss_f1_service_direct(f1_request: F1ToolRequest) -> str:
                 params={"callback_url": callback_url},
                 timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
             )
+
             response.raise_for_status()
 
             job_data = response.json()
@@ -433,7 +466,9 @@ async def list_requests():
 async def dss_webhook_callback(user_id: str, callback_data: Dict[str, Any]):
     """Webhook endpoint for DSS job completion callbacks"""
 
-    logger.info(f"Received DSS callback for user {user_id}: {callback_data}")
+    logger.info(
+        f"Received DSS callback for user {user_id}:\n{pprint.pformat(callback_data)}"
+    )
 
     # Find the corresponding request
     for request_id, request_data in requests_storage.items():
