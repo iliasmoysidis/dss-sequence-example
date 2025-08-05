@@ -13,7 +13,6 @@ tasks:
     desc: Clean up all containers, volumes, and generated files
     cmds:
       - docker compose down -v --remove-orphans
-      - docker system prune -f
       - task: clean-certs
 
   setup-certs:
