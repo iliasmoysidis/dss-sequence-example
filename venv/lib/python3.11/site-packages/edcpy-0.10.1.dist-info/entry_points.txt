@@ -1,0 +1,4 @@
+[console_scripts]
+configure-keycloak-connector=edcpy.keycloak:cli_create_connector_client
+run-http-backend=edcpy.backend:run_server
+
