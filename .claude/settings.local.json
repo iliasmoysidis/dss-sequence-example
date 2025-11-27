@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(touch:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(rm:*)",
+      "Bash(chmod:*)",
+      "Bash(task setup-certs)",
+      "Bash(task clean-certs)",
+      "WebFetch(domain:pypi.org)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(keytool:*)",
+      "Bash(grep:*)",
+      "Bash(python:*)",
+      "Bash(task status)",
+      "Bash(curl:*)",
+      "Bash(docker compose logs:*)"
+    ],
+    "deny": []
+  }
+}
