@@ -45,7 +45,7 @@ async def run_edcpy_negotiation_and_transfer(asset_id: str, provider_connector_p
             # The SSE message contains auth_code field with the JWT token
             bearer_token = credentials.get("auth_code")
 
-            # Also tget the endpoint URL from the credentials
+            # Also get the endpoint URL from the credentials
             endpoint_url = credentials.get("endpoint")
 
             if not bearer_token:

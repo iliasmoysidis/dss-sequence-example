@@ -2,7 +2,7 @@ import coloredlogs
 import logging
 
 
-def setup_logging(level: str = "DEBUG") ->logging.Logger:
+def setup_logging(level: str = "DEBUG") -> logging.Logger:
     """
     Configure logging for the application.
 
