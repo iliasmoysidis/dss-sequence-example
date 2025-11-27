@@ -20,7 +20,8 @@ class NegotiationRequest(BaseModel):
 
 
 @router.post("/connector/initiate")
-async def initiate_negotiation_and_transfer(request: NegotiationRequest = Body(...)):
+async def initiate_negotiation_and_transfer(
+        request: NegotiationRequest = Body(...)):
     try:
         return await run_edcpy_negotiation_and_transfer(
             request.asset_id,

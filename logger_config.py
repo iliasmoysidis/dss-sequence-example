@@ -21,4 +21,5 @@ def setup_logging(level: str = "DEBUG") -> logging.Logger:
 
     return logger
 
+
 logger = setup_logging(level="DEBUG")

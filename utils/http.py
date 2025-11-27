@@ -1,4 +1,6 @@
+from urllib.parse import urlparse
 from config import AUTHORIZATION_HEADER, CONTENT_TYPE_HEADER, ACCEPT_HEADER, JSON_CONTENT_TYPE, SSE_CONTENT_TYPE
+
 
 def build_headers(token: str, sse: bool = False, bearer: bool = True) -> dict:
     """
@@ -23,7 +25,6 @@ def build_headers(token: str, sse: bool = False, bearer: bool = True) -> dict:
 
     return headers
 
-from urllib.parse import urlparse
 
 def _extract_hostname(host: str) -> str:
     """

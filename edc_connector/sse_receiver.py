@@ -59,7 +59,8 @@ class SSEPullCredentialsReceiver:
 
                 if transfer_id:
                     self.credentials[transfer_id] = data
-                    logger.info(f"Received credentials for transfer {transfer_id}:")
+                    logger.info(
+                        f"Received credentials for transfer {transfer_id}:")
 
                     logger.debug(
                         f"SSE message for transfer '{transfer_id}':\n{pprint.pformat(data)}"
@@ -78,7 +79,8 @@ class SSEPullCredentialsReceiver:
 
             await asyncio.sleep(SSE_POLL_INTERVAL_SECONDS)
 
-        raise TimeoutError(f"Credentials not received for transfer {transfer_id}")
+        raise TimeoutError(
+            f"Credentials not received for transfer {transfer_id}")
 
     async def stop_listening(self):
         """Stop listening for SSE messages"""

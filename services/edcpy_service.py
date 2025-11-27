@@ -6,8 +6,11 @@ from edcpy.edc_api import ConnectorController
 from config import DASHBOARD_BACKEND_URL, DASHBOARD_API_KEY
 
 
-
-async def run_edcpy_negotiation_and_transfer(asset_id: str, provider_connector_protocol_url: str, provider_connector_id: str, provider_host: str) -> dict:
+async def run_edcpy_negotiation_and_transfer(
+        asset_id: str,
+        provider_connector_protocol_url: str,
+        provider_connector_id: str,
+        provider_host: str) -> dict:
     """Use edcpy to handle contract negotiation and transfer process"""
     try:
         # Initialize EDC controller with custom config
@@ -15,10 +18,12 @@ async def run_edcpy_negotiation_and_transfer(asset_id: str, provider_connector_p
         controller = ConnectorController(config=edc_config)
 
         # Start SSE listener for credentials
-        sse_receiver = SSEPullCredentialsReceiver(DASHBOARD_BACKEND_URL, DASHBOARD_API_KEY)
+        sse_receiver = SSEPullCredentialsReceiver(
+            DASHBOARD_BACKEND_URL, DASHBOARD_API_KEY)
 
         # Start listening in the background
-        listen_task = asyncio.create_task(sse_receiver.start_listening(provider_host))
+        listen_task = asyncio.create_task(
+            sse_receiver.start_listening(provider_host))
 
         try:
             # Run negotiation flow
@@ -26,7 +31,7 @@ async def run_edcpy_negotiation_and_transfer(asset_id: str, provider_connector_p
 
             transfer_details = await controller.run_negotiation_flow(
                 counter_party_protocol_url=provider_connector_protocol_url,
-                counter_party_connector_id= provider_connector_id,
+                counter_party_connector_id=provider_connector_id,
                 asset_query=asset_id
             )
 
@@ -49,15 +54,18 @@ async def run_edcpy_negotiation_and_transfer(asset_id: str, provider_connector_p
             endpoint_url = credentials.get("endpoint")
 
             if not bearer_token:
-                logger.error(f"No access token in received credentials for transfer {transfer_id}")
-                raise Exception("No auth_code (access token) in received credentials")
-            
+                logger.error(
+                    f"No access token in received credentials for transfer {transfer_id}")
+                raise Exception(
+                    "No auth_code (access token) in received credentials")
+
             if not endpoint_url:
-                logger.error(f"No endpoint URL in received credentials for transfer {transfer_id}")
+                logger.error(
+                    f"No endpoint URL in received credentials for transfer {transfer_id}")
                 raise Exception("No endpoint in received credentials")
-            
+
             return {"bearer_token": bearer_token, "endpoint_url": endpoint_url}
-        
+
         finally:
             # Stop SSE listener
             await sse_receiver.stop_listening()
