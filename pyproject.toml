@@ -1,7 +1,7 @@
 [project]
-name = "orchestrator"
+name = "mediator"
 version = "0.1.0"
-description = "The Orchestrator is responsible for managing contract negotiation and coordinating communication between the various servers involved in the process."
+description = "The Mediator is responsible for managing contract negotiation and coordinating communication between the various servers involved in the process."
 authors = [
     {name = "Ilias Moysidis",email = "iliamous@iti.gr"}
 ]

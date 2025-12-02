@@ -3,8 +3,8 @@ from api.routes import router
 
 
 app = FastAPI(
-    title="Dashboard Backend API",
-    description="Dashboard backend that orchestrates connector negotiation and transfer via connectors",
+    title="Dashboard Mediator API",
+    description="Dashboard Mediator that orchestrates connector negotiation and transfer via connectors",
     version="1.0.0",
 )
 
@@ -17,5 +17,5 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "service": "Dashboard Orchestrator"
+        "service": "Dashboard Mediator"
     }

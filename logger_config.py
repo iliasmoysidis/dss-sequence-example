@@ -14,7 +14,7 @@ def setup_logging(level: str = "DEBUG") -> logging.Logger:
     """
 
     coloredlogs.install(level=level)
-    logger = logging.getLogger("orchestrator")
+    logger = logging.getLogger("mediator")
 
     logging.getLogger("httpcore").setLevel(logging.INFO)
     logging.getLogger("httpx").setLevel(logging.INFO)
