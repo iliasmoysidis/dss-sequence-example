@@ -1,8 +1,8 @@
 import os
 
 # Configuration
-DASHBOARD_BACKEND_URL = os.environ.get(
-    "DASHBOARD_BACKEND_URL",
+DASHBOARD_CONSUMER_BACKEND_URL = os.environ.get(
+    "DASHBOARD_CONSUMER_BACKEND_URL",
     "http://dashboard_backend:28000")
 
 # API Keys
